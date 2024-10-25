@@ -1,5 +1,5 @@
 # c8
-chip 8 emulator using tkinter
+chip-8 emulator using tkinter
 
 The Main file has all the opcodes and screen interaction
 The Diplay file has input handling and sprite drawing
