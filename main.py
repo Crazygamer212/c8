@@ -3,15 +3,18 @@ from random import randint as rng
 from time import time
 from time import sleep as wait
 from Logger import *
+from sound import *
 
 class Chip8:
-    def __init__(self):
+    def __init__(self, soundFrequency=100):
         self.memory = bytearray(0xfff)
         self.PC = 0x200
         self.Register = [0]*0x10
         self.I = 0x00
-        self.TimeR = 0
+        self.SoundR = 0
         self.DelayR = 0
+
+        self.frequency = soundFrequency
         
         self.Display = Display()
         
@@ -55,7 +58,20 @@ class Chip8:
             if self.targetTime < time():
                 self.DelayR -= 1
                 self.DelayR = 0 if self.DelayR < 0 else self.DelayR
+
+                self.SoundR -= 1
+                self.SoundR = 0 if self.SoundR < 0 else self.SoundR
+
+                """
+                if self.SoundR > 0:
+                    startBeep(self.frequency)
+                else:
+                    endBeep()
+                """
+
                 self.targetTime = time()+(1/60)
+
+
             wait(1/500)
         print("Over")
         self.Display.canvas.mainloop()
@@ -139,19 +155,20 @@ class Chip8:
             operandB1 =  int(f"0x{Command[1]}",base=16)
             operandB2 =  int(f"0x{Command[2]}",base=16)
             
-            value = abs(self.Register[operandB1] - self.Register[operandB2])
+            value = int(hex(self.Register[operandB1] - self.Register[operandB2]),base=16)
             overflow = self.Register[operandB1] > self.Register[operandB2]
             self.Register[0xf],self.Register[operandB1] = overflow,value
             
-        elif (Command[0],Command[3]) == ("8","6"):#0x8xx6
-            operandB1 =  int(f"0x{Command[1]}",base=16)
-            operandB2 =  int(f"0x{Command[2]}",base=16)
+        elif (Command[0], Command[3]) == ("8", "6"):  # 0x8XY6
+            # X and Y are derived from Command[1] and Command[2]
+            X = int(f"0x{Command[1]}", base=16)
             
-            if self.Register[operandB1]:
-                self.Register[0xf] = 1
-            else:
-                self.Register[0xf] = 0
-                self.Register[operandB1]>>=1
+            # Set VF to the least significant bit of VX
+            self.Register[0xf] = self.Register[X] & 1
+            
+            # Shift VX right by 1
+            self.Register[X] >>= 1
+
         
         elif (Command[0],Command[3]) == ("8","7"):#0x8xx7
             operandB1 =  int(f"0x{Command[1]}",base=16)
@@ -161,15 +178,16 @@ class Chip8:
             overflow = self.Register[operandB1] < self.Register[operandB2]
             self.Register[0xf],self.Register[operandB1] = overflow,value
         
-        elif (Command[0],Command[3]) == ("8","e"):#0x8xxe
-            operandB1 =  int(f"0x{Command[1]}",base=16)
-            operandB2 = int(f"0x{Command[2]}",base=16)
+        elif (Command[0], Command[3]) == ("8", "e"):  # 0x8XYE
+            # X is derived from Command[1]
+            X = int(f"0x{Command[1]}", base=16)
             
-            if (self.Register[operandB1] >> 16) & 0b1:
-                self.Register[0xf] = 1
-            else:
-                self.Register[0xf] = 0
-                self.Register[operandB1]<<=1
+            # Set VF to the most significant bit of VX
+            self.Register[0xf] = (self.Register[X] >> 7) & 1
+            
+            # Shift VX left by 1
+            self.Register[X] = (self.Register[X] << 1) & 0xFF  # Ensure 8-bit wrap-around
+
                 
         elif (Command[0],Command[3]) == ("9","0"):#0x9
             operandB1 =  int(f"0x{Command[1]}",base=16)
@@ -232,7 +250,7 @@ class Chip8:
             elif Command[2:4] == "15":#0xfx15
                 self.DelayR = self.Register[operandB1]
             elif Command[2:4] == "18":#0xfx18
-                self.TimeR = self.Register[operandB1]
+                self.SoundR = self.Register[operandB1]
             elif Command[2:4] == "1e":#0xfx1e
                 self.I += self.Register[operandB1]
             elif Command[2:4] == "29":#0xfx29
@@ -243,10 +261,10 @@ class Chip8:
                 self.memory[self.I + 1] = (vx_value // 10) % 10       # Tens digit
                 self.memory[self.I + 2] = vx_value % 10               # Ones digit
             elif Command[2:4] == "55":#0xfx55
-                for Reg in range(operandB1):
+                for Reg in range(operandB1+1):
                     self.memory[self.I + Reg] = self.Register[Reg]
             elif Command[2:4] == "65":#0xfx65
-                for Reg in range(operandB1):
+                for Reg in range(operandB1+1):
                     self.Register[Reg] = self.memory[self.I + Reg]
     
     def Restrict(self):
